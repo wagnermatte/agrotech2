@@ -1,42 +1,93 @@
 {% extends "base.html" %}
-{% from "_grade.html" import grade %}
+{% from "_grade.html" import grade, barra with context %}
 
 {% block titulo %}{{ analise.nome }} | AgroTech{% endblock %}
 
 {% block conteudo %}
-<section class="hero">
-  <div class="container">
-    <p><a href="{{ url_for('gerar_analise') }}">Voltar para as análises salvas</a></p>
-    <h1 class="titulo-livre">{{ analise.nome }}</h1>
-    <p class="suave">
-      De {{ analise.inicio[8:10] }}/{{ analise.inicio[5:7] }}/{{ analise.inicio[0:4] }} {{ analise.inicio[11:16] }}
-      a {{ analise.fim[8:10] }}/{{ analise.fim[5:7] }}/{{ analise.fim[0:4] }} {{ analise.fim[11:16] }}.
-      Arquivo <code>{{ analise.arquivo }}</code>, {{ "{:,}".format(analise.quantidade_intervalos).replace(",", ".") }} intervalos válidos.
-      Gerada em {{ analise.criado_em[8:10] }}/{{ analise.criado_em[5:7] }} às {{ analise.criado_em[11:16] }}.
-    </p>
-    <p><a class="botao" href="{{ url_for('baixar_pdf', identificador=analise.id) }}">Baixar PDF</a> <a class="botao secundario" href="{{ url_for('gerar_analise') }}">Gerar outra análise</a></p>
+{% set perm = analise.metricas.permanencia %}
+{% set ind = analise.indicadores %}
 
+<section class="hero curto">
+  <div class="container">
+    <nav class="trilha" aria-label="Trilha">
+      <a href="{{ url_for('gerar_analise') }}">Análises salvas</a><span aria-hidden="true">/</span><span>{{ analise.nome }}</span>
+    </nav>
+    <h1 class="titulo-livre">{{ analise.nome }}</h1>
+    <div class="fichas">
+      <span>{{ analise.inicio[8:10] }}/{{ analise.inicio[5:7] }}/{{ analise.inicio[0:4] }} {{ analise.inicio[11:16] }} → {{ analise.fim[8:10] }}/{{ analise.fim[5:7] }}/{{ analise.fim[0:4] }} {{ analise.fim[11:16] }}</span>
+      <span>{{ analise.quantidade_intervalos|milhar }} intervalos válidos</span>
+      <span>{{ analise.arquivo }}</span>
+      <span class="sem-borda">gerada em {{ analise.criado_em[8:10] }}/{{ analise.criado_em[5:7] }} às {{ analise.criado_em[11:16] }}</span>
+    </div>
+    <div class="acoes">
+      <a class="botao" href="{{ url_for('baixar_pdf', identificador=analise.id) }}">Baixar PDF</a>
+      <a class="botao secundario" href="{{ url_for('gerar_analise') }}">Gerar outra análise</a>
+    </div>
+  </div>
+</section>
+
+<section class="secao branca">
+  <div class="container">
     <div class="indicadores">
-      <div><strong>{{ numero(analise.indicadores.utilizacao_produtiva) }}%</strong>utilização produtiva</div>
-      <div><strong>{{ numero(analise.indicadores.taxa_parada) }}%</strong>taxa de parada</div>
-      <div><strong>{{ numero(analise.metricas.rpm.media) }}</strong>RPM médio<br><span class="suave">máximo {{ numero(analise.metricas.rpm.maximo) }}</span></div>
-      <div><strong>{{ numero(analise.metricas.velocidade.media) }}</strong>velocidade média em operação<br><span class="suave">máxima {{ numero(analise.metricas.velocidade.maximo) }}</span></div>
+      <div class="i-util">
+        <b>Utilização produtiva</b>
+        <strong>{{ numero(ind.utilizacao_produtiva) }}%</strong>
+        <span class="suave">{{ perm.Working.segundos|horas }} h trabalhando, de {{ perm.values()|sum(attribute='segundos')|horas }} h</span>
+      </div>
+      <div class="i-parada">
+        <b>Taxa de parada</b>
+        <strong>{{ numero(ind.taxa_parada) }}%</strong>
+        <span class="suave">{{ perm.Idle.segundos|horas }} h em Ocioso</span>
+      </div>
+      <div>
+        <b>RPM médio</b>
+        <strong>{{ numero(analise.metricas.rpm.media) }}</strong>
+        <span class="suave">máximo {{ numero(analise.metricas.rpm.maximo) }}</span>
+      </div>
+      <div>
+        <b>Velocidade média em operação</b>
+        <strong>{{ numero(analise.metricas.velocidade.media) }}</strong>
+        <span class="suave">máxima {{ numero(analise.metricas.velocidade.maximo) }} · unidade original do CSV</span>
+      </div>
     </div>
 
-    <h3>Tempo em cada estado</h3>
-    <div class="barras">
-      {% for estado, dados in analise.metricas.permanencia.items() %}
-      <div class="barra">
-        <span>{{ nomes[estado] }}</span>
-        <div class="trilho"><span class="{{ estado }}" style="width: {{ dados.percentual }}%;"></span></div>
-        <span class="valor">{{ numero(dados.percentual) }}% ({{ numero(dados.segundos / 3600) }} h)</span>
+    <h2 class="h-menor">Tempo em cada estado</h2>
+    {{ barra(perm, 'alta') }}
+    <div class="estados-lista">
+      {% for k, d in perm.items() %}
+      <div{% if d.percentual == 0 %} class="zerado"{% endif %}>
+        <span><i class="{{ k }}"></i>{{ nomes[k] }}</span>
+        <span>{{ d.segundos|horas }} h</span>
+        <span>{{ numero(d.percentual) }}%</span>
       </div>
       {% endfor %}
     </div>
 
-    <h3>Estado predominante por hora</h3>
-    <p class="suave">Cada quadrado é uma hora do período analisado. <a href="{{ url_for('como_funciona') }}#codigo">Como esse cálculo é feito</a></p>
-    {{ grade(dias, nomes) }}
+    {% if analise.motor_desligado is defined and analise.motor_desligado is not none %}
+    <div class="leitura">
+      {# abaixo de 0,01 h (36 s) o valor apareceria como "0,00 h", então conta como motor ligado #}
+      {% if analise.motor_desligado >= 36 %}
+      <p>Das {{ perm.Idle.segundos|horas }} h em Ocioso, {{ analise.motor_desligado|horas }} h foram com o motor desligado (RPM 0). O modelo ainda não tem um estado “Desligado”, então elas contam como parada.</p>
+      {% else %}
+      <p>Praticamente todo o tempo em Ocioso foi com o motor ligado: é ociosidade de verdade, não máquina desligada.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="secao">
+  <div class="container">
+    <div class="cabeca-secao">
+      <div>
+        <h2 class="h-menor">Estado predominante por hora</h2>
+        <p class="suave" style="margin:0">Cada quadrado é uma hora do período. Passe o mouse para ver os minutos.</p>
+      </div>
+      <a href="{{ url_for('como_funciona') }}#p15">Como esse cálculo é feito</a>
+    </div>
+    <div class="moldura">
+      {{ grade(dias, link=false) }}
+    </div>
   </div>
 </section>
 {% endblock %}

@@ -1,22 +1,31 @@
-{# grade de dias (linhas) x horas (colunas), cada célula pintada com o estado predominante #}
-{% macro grade(dias, nomes) %}
-<div class="grade">
+{# grade de dias (linhas) x horas (colunas), cada célula pintada com o estado predominante.
+   Importar com:  {% from "_grade.html" import grade with context %}
+   "dias" vem de grade_detalhada() em app.py. link=False tira o atalho "analisar este dia". #}
+{% macro grade(dias, link=true) %}
+<div class="grade" data-grade>
   <table aria-label="Estado predominante da máquina em cada hora, um dia por linha">
     <thead>
       <tr>
-        <th></th>
-        {% for h in range(24) %}<th>{{ '%02d' % h if h % 3 == 0 else '' }}</th>{% endfor %}
+        <th scope="col"><span class="visualmente-oculto">Dia</span></th>
+        {% for h in range(24) %}<th scope="col">{{ '%02d' % h if h % 3 == 0 else '' }}</th>{% endfor %}
       </tr>
     </thead>
     <tbody>
-      {% for dia, horas in dias.items() %}
+      {% for d in dias %}
       <tr>
-        <th>{{ dia[8:10] }}/{{ dia[5:7] }}</th>
-        {% for estado in horas %}
-          {% if estado %}
-          {% set rotulo %}{{ dia[8:10] }}/{{ dia[5:7] }} às {{ '%02d' % loop.index0 }}h: {{ nomes[estado] }}{% endset %}<td class="{{ estado }}" title="{{ rotulo }}" aria-label="{{ rotulo }}"></td>
+        <th scope="row">
+          {% if link %}
+          <a href="{{ url_for('gerar_analise', inicio=d.inicio, fim=d.fim, nome=d.rotulo ~ '/' ~ d.dia[:4]) }}" title="Analisar {{ d.rotulo }}"><b>{{ d.rotulo }}</b><small>{{ d.semana }}</small></a>
           {% else %}
-          <td title="sem dados" aria-label="sem dados"></td>
+          <span><b>{{ d.rotulo }}</b><small>{{ d.semana }}</small></span>
+          {% endif %}
+        </th>
+        {% for c in d.horas %}
+          {% set quando = d.semana ~ ' ' ~ d.rotulo ~ ' · ' ~ ('%02d' % loop.index0) ~ 'h–' ~ ('%02d' % ((loop.index0 + 1) % 24)) ~ 'h' %}
+          {% if c %}
+          <td class="{{ c.estado }}" data-estado="{{ c.estado }}" data-quando="{{ quando }}" data-segundos='{{ c.segundos|tojson }}' title="{{ quando }}: {{ nomes[c.estado] }}" aria-label="{{ quando }}: {{ nomes[c.estado] }}"></td>
+          {% else %}
+          <td data-estado="vazio" data-quando="{{ quando }}" title="{{ quando }}: sem dados" aria-label="{{ quando }}: sem dados"></td>
           {% endif %}
         {% endfor %}
       </tr>
@@ -24,12 +33,35 @@
     </tbody>
   </table>
 </div>
-<div class="legenda">
-  <span class="l-Working">Trabalhando</span>
-  <span class="l-Turning">Manobrando</span>
-  <span class="l-Moving">Deslocando</span>
-  <span class="l-Idle">Ocioso</span>
-  <span class="l-desconhecido">Desconhecido</span>
-  <span class="l-vazio">Sem dados</span>
+<div class="legenda" data-legenda>
+  {% for k in estados %}<button type="button" data-filtro="{{ k }}" aria-pressed="false"><i class="{{ k }}"></i>{{ nomes[k] }}</button>{% endfor %}
+  <button type="button" data-filtro="vazio" aria-pressed="false"><i class="vazio"></i>Sem dados</button>
 </div>
+{% endmacro %}
+
+
+{# barra empilhada com o tempo de cada estado #}
+{% macro barra(permanencia, classe='') %}
+<div class="barra-estados {{ classe }}" role="img" aria-label="{% for k, d in permanencia.items() %}{{ nomes[k] }} {{ numero(d.percentual) }}%{% if not loop.last %}, {% endif %}{% endfor %}">
+  {% for k, d in permanencia.items() if d.percentual > 0 %}<span class="{{ k }}" style="width: {{ d.percentual }}%" title="{{ nomes[k] }} {{ numero(d.percentual) }}%">{% if classe != 'fina' and d.percentual > 15 %}{{ d.percentual|round|int }}%{% endif %}</span>{% endfor %}
+</div>
+{% endmacro %}
+
+
+{# cartão de uma análise salva (usado no início) #}
+{% macro cartao_analise(a) %}
+<article class="cartao-analise">
+  <div class="cartao-analise-topo">
+    <div>
+      <a class="titulo" href="{{ url_for('ver_analise', identificador=a.id) }}">{{ a.nome }}</a>
+      <span class="mono suave">{{ a.inicio|curta }} até {{ a.fim|curta }}</span>
+    </div>
+    <span class="util"><strong>{{ numero(a.indicadores.utilizacao_produtiva) }}%</strong>utilização</span>
+  </div>
+  {{ barra(a.metricas.permanencia, 'fina') }}
+  <div class="acoes">
+    <a class="botao pequeno" href="{{ url_for('ver_analise', identificador=a.id) }}">Abrir</a>
+    <a class="botao pequeno" href="{{ url_for('baixar_pdf', identificador=a.id) }}">Baixar PDF</a>
+  </div>
+</article>
 {% endmacro %}

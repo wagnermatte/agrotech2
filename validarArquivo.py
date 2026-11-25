@@ -555,6 +555,18 @@ def calcular_indicadores(permanencia):
     }
 
 
+# soma o tempo em que a máquina ficou ociosa com o motor desligado (RPM 0)
+
+def calcular_motor_desligado(intervalos):
+    segundos = 0.0
+
+    for intervalo in intervalos:
+        if intervalo["estado"] == "Idle" and intervalo.get("rpm") == 0:
+            segundos += intervalo["intervalo_segundos"]
+
+    return segundos
+
+
 # agrupa os intervalos por hora e guarda o estado que mais apareceu
 
 def calcular_linha_do_tempo(intervalos):
@@ -575,7 +587,7 @@ def calcular_linha_do_tempo(intervalos):
 
     for hora, tempos in horas.items():
         estadoPredominante = max(tempos, key=tempos.get)
-        linha.append({"hora": hora, "estado": estadoPredominante})
+        linha.append({"hora": hora, "estado": estadoPredominante, "segundos": tempos})
 
     return linha
 
@@ -613,6 +625,7 @@ def processar_periodo(caminho, inicio, fim):
         "metricas": metricas,
         "indicadores": calcular_indicadores(metricas["permanencia"]),
         "linha_do_tempo": calcular_linha_do_tempo(intervalos),
+        "motor_desligado": calcular_motor_desligado(intervalos),
     }
 
 
@@ -635,6 +648,7 @@ def salvar_analise(nome, caminho, inicio, fim, resultado):
         "metricas": resultado["metricas"],
         "indicadores": resultado["indicadores"],
         "linha_do_tempo": resultado["linha_do_tempo"],
+        "motor_desligado": resultado.get("motor_desligado"),
     }
 
     caminhoJson = os.path.join(pastaAnalises, identificador + ".json")

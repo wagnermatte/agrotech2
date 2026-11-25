@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% from "_grade.html" import barra with context %}
 
 {% block titulo %}Gerar análise | AgroTech{% endblock %}
 
 {% block conteudo %}
-<section class="hero sem-fundo">
+<section class="hero curto">
   <div class="container">
     <h1>Gerar análise</h1>
     <div class="texto">
-      <p>Escolha o período. O sistema calcula os indicadores a partir dos dados brutos já carregados e salva o resultado para você abrir depois ou baixar em PDF.</p>
+      <p>Escolha um período dos dados carregados. O sistema calcula os indicadores, salva o resultado e deixa o PDF pronto.</p>
       <p class="suave">Quer entender a conta antes? <a href="{{ url_for('como_funciona') }}#codigo">Veja o código passo a passo</a>.</p>
     </div>
   </div>
@@ -15,55 +16,113 @@
 
 <div class="container layout-gerar">
   <div class="painel">
-    <form class="formulario" method="post" onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Calculando...';">
+    <div class="painel-arquivo">
+      <div><span class="tipo">CSV</span><code>{{ arquivo }}</code></div>
+      <span class="mono suave">{{ disponivel.inicio.strftime('%d/%m %H:%M') }} → {{ disponivel.fim.strftime('%d/%m %H:%M') }} · simulado</span>
+    </div>
+
+    <form class="formulario" method="post" data-form-analise
+          data-min="{{ disponivel.inicio.strftime(formato) }}" data-max="{{ disponivel.fim.strftime(formato) }}">
+
       {% if erro %}
-      <div class="erro" role="alert"><b>Não foi possível gerar a análise.</b><br>{{ erro }}</div>
+      <div class="erro" role="alert" data-erro-servidor>
+        <b>Não foi possível gerar a análise.</b>
+        <span>{{ erro }}</span>
+        {% if erro_tipo %}<code>{{ erro_tipo }}</code>{% endif %}
+      </div>
       {% endif %}
 
       <label>
-        Nome da análise
+        <span>Nome da análise</span>
         <input type="text" name="nome" value="{{ campos.nome }}" placeholder="Ex.: Segunda-feira, turno da manhã" maxlength="80">
+        <span class="ajuda">Se ficar em branco, a análise se chama “<span data-sugestao>Análise sem nome</span>”.</span>
       </label>
 
-      <div class="linha-datas">
-        <label>
-          Início
-          <input type="datetime-local" name="inicio" value="{{ campos.inicio }}" required>
-        </label>
-        <label>
-          Fim
-          <input type="datetime-local" name="fim" value="{{ campos.fim }}" required>
-        </label>
+      <fieldset>
+        <legend>Período</legend>
+        <div class="chips" role="radiogroup" aria-label="Atalhos de período">
+          <button class="chip" type="button" role="radio" aria-checked="false" data-preset="semana">Semana inteira</button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-preset="dia">Um dia</button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-preset="turno">Turno 07h–18h</button>
+          <button class="chip" type="button" role="radio" aria-checked="false" data-preset="livre">Personalizado</button>
+        </div>
+        <div class="dias" data-dias hidden>
+          {% for d in dias %}
+          <button class="chip" type="button" aria-pressed="false" data-dia="{{ d.inicio }}"><small>{{ d.semana }}</small><b>{{ d.numero }}</b></button>
+          {% endfor %}
+        </div>
+        <div class="linha-datas">
+          <label>
+            <span class="rotulo-campo">Início</span>
+            <input type="datetime-local" name="inicio" value="{{ campos.inicio }}" min="{{ disponivel.inicio.strftime(formato) }}" max="{{ disponivel.fim.strftime(formato) }}" required>
+          </label>
+          <label>
+            <span class="rotulo-campo">Fim</span>
+            <input type="datetime-local" name="fim" value="{{ campos.fim }}" min="{{ disponivel.inicio.strftime(formato) }}" max="{{ disponivel.fim.strftime(formato) }}" required>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="trilho" aria-hidden="true">
+        <div class="trilho-faixa">
+          {% for d in dias %}<i></i>{% endfor %}
+          <span class="trilho-sel" data-selecao></span>
+        </div>
+        <div class="trilho-rotulos">{% for d in dias %}<span>{{ d.semana }} {{ d.numero }}</span>{% endfor %}</div>
+        <p class="ajuda">turno simulado, 07h às 18h</p>
       </div>
 
-      <p class="suave ajuda">
-        Dados disponíveis em <code>{{ arquivo }}</code>: de {{ disponivel.inicio.strftime('%d/%m/%Y %H:%M') }} a {{ disponivel.fim.strftime('%d/%m/%Y %H:%M') }}. O cálculo pode levar alguns segundos.
-      </p>
+      <div class="erro" role="alert" data-erro-cliente hidden>
+        <b>Não dá para gerar com esse período.</b>
+        <span data-mensagem></span>
+        <code>DadosInsuficientesError</code>
+      </div>
 
-      <div><button class="botao" type="submit">Gerar análise</button></div>
+      <div class="resumo-periodo" data-resumo>
+        <div>Período<strong data-periodo>{{ campos.inicio[8:10] }}/{{ campos.inicio[5:7] }} → {{ campos.fim[8:10] }}/{{ campos.fim[5:7] }}</strong></div>
+        <div>Duração<strong data-duracao>—</strong></div>
+      </div>
+
+      <div>
+        <button class="botao" type="submit">Gerar análise <span class="seta" aria-hidden="true">→</span></button>
+        <ol class="etapas" data-etapas hidden aria-live="polite">
+          <li>Ler e conferir o arquivo <code>ler_csv()</code></li>
+          <li>Limpar, traduzir e ordenar <code>preparar_registros()</code></li>
+          <li>Filtrar o período e medir intervalos <code>validar_intervalos()</code></li>
+          <li>Calcular e salvar a análise <code>salvar_analise()</code></li>
+        </ol>
+      </div>
     </form>
   </div>
 
-  <div>
-    <h3>Análises salvas</h3>
+  <aside>
+    <div class="salvas-cabeca">
+      <h2>Análises salvas</h2>
+      <span class="mono suave">{{ analises|length }} {{ 'análise' if analises|length == 1 else 'análises' }}</span>
+    </div>
     {% if analises %}
     <ul class="salvas">
       {% for a in analises %}
       <li>
         <div class="info">
-          <a href="{{ url_for('ver_analise', identificador=a.id) }}">{{ a.nome }}</a>
-          <small>{{ a.inicio[8:10] }}/{{ a.inicio[5:7] }} {{ a.inicio[11:16] }} até {{ a.fim[8:10] }}/{{ a.fim[5:7] }} {{ a.fim[11:16] }}. Utilização produtiva de {{ numero(a.indicadores.utilizacao_produtiva) }}%.</small>
+          <div>
+            <a href="{{ url_for('ver_analise', identificador=a.id) }}">{{ a.nome }}</a>
+            <span class="mono suave">{{ a.inicio|curta }} até {{ a.fim|curta }}</span>
+          </div>
+          <span class="util"><strong>{{ numero(a.indicadores.utilizacao_produtiva) }}%</strong>utilização</span>
         </div>
+        {{ barra(a.metricas.permanencia, 'fina') }}
         <div class="acoes">
-          <a class="botao secundario" href="{{ url_for('ver_analise', identificador=a.id) }}">Abrir</a>
-          <a class="botao secundario" href="{{ url_for('baixar_pdf', identificador=a.id) }}">Baixar PDF</a>
+          <a class="botao pequeno" href="{{ url_for('ver_analise', identificador=a.id) }}">Abrir</a>
+          <a class="botao pequeno" href="{{ url_for('baixar_pdf', identificador=a.id) }}">Baixar PDF</a>
+          <small>gerada {{ a.criado_em[8:10] }}/{{ a.criado_em[5:7] }} às {{ a.criado_em[11:16] }}</small>
         </div>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="suave">Nenhuma análise salva ainda. Escolha um período no formulário e clique em "Gerar análise".</p>
+    <p class="suave">Nenhuma análise salva ainda. Escolha um período no formulário e clique em “Gerar análise”.</p>
     {% endif %}
-  </div>
+  </aside>
 </div>
 {% endblock %}

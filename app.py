@@ -3,6 +3,7 @@
 
 import inspect
 import textwrap
+from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, abort, Response
 
@@ -16,16 +17,101 @@ arquivoDados = va.arquivoPadrao
 # guarda resultados que demoram para calcular (o CSV de 168h tem 600 mil linhas)
 memoria = {}
 
+# datetime.weekday(): 0 = segunda-feira
+diasSemana = ["seg", "ter", "qua", "qui", "sex", "sáb", "dom"]
+
+
+# ---------- funções de apresentação (só formatam, não calculam indicadores) ----------
+
+# organiza a linha do tempo em dias x 24 horas, com os segundos de cada estado
+# (análises salvas antes desta versão não têm "segundos": a grade continua funcionando)
+
+def grade_detalhada(linha):
+    dias = {}
+
+    for item in linha:
+        dia, hora = item["hora"].split(" ")
+
+        if dia not in dias:
+            dias[dia] = [None] * 24
+
+        segundos = item.get("segundos") or {}
+        dias[dia][int(hora[:2])] = {
+            "estado": item["estado"],
+            "segundos": segundos,
+        }
+
+    grade = []
+
+    for dia, horas in dias.items():
+        data = datetime.strptime(dia, "%Y-%m-%d")
+        grade.append({
+            "dia": dia,
+            "rotulo": data.strftime("%d/%m"),
+            "semana": diasSemana[data.weekday()],
+            "inicio": data.strftime(va.formatoCampoData),
+            "fim": (data + timedelta(days=1)).strftime(va.formatoCampoData),
+            "horas": horas,
+        })
+
+    return grade
+
+
+# lista os dias que existem no arquivo, para os atalhos do formulário
+
+def dias_do_periodo(disponivel):
+    dia = disponivel["inicio"].replace(hour=0, minute=0, second=0)
+    dias = []
+
+    while dia < disponivel["fim"]:
+        dias.append({
+            "inicio": dia.strftime(va.formatoCampoData),
+            "semana": diasSemana[dia.weekday()],
+            "numero": dia.strftime("%d"),
+        })
+        dia += timedelta(days=1)
+
+    return dias
+
+
+@app.template_filter("horas")
+def filtro_horas(segundos):
+    return va.formatar_numero((segundos or 0) / 3600)
+
+
+@app.template_filter("milhar")
+def filtro_milhar(valor):
+    return "{:,}".format(int(valor)).replace(",", ".")
+
+
+@app.template_filter("curta")
+def filtro_curta(texto):
+    # "2026-11-03 07:00:00" vira "03/11 07:00"
+    return f"{texto[8:10]}/{texto[5:7]} {texto[11:16]}"
+
+
+@app.context_processor
+def variaveis_globais():
+    return {
+        "nomes": va.nomesEstados,
+        "estados": list(va.nomesEstados.keys()),
+        "numero": va.formatar_numero,
+        "arquivo": arquivoDados,
+    }
+
+
+# ---------- dados usados por mais de uma página ----------
 
 def resumo_semana():
     if "semana" not in memoria:
         resultado = va.processar_arquivo(arquivoDados)
         intervalos = resultado["intervalos"]
         memoria["semana"] = {
-            "dias": va.linha_do_tempo_por_dia(va.calcular_linha_do_tempo(intervalos)),
+            "grade": grade_detalhada(va.calcular_linha_do_tempo(intervalos)),
             "metricas": resultado["metricas"],
             "indicadores": va.calcular_indicadores(resultado["metricas"]["permanencia"]),
             "quantidade_intervalos": len(intervalos),
+            "motor_desligado": va.calcular_motor_desligado(intervalos),
         }
     return memoria["semana"]
 
@@ -50,13 +136,14 @@ def trecho(nomeArquivo, comeco, fim):
     return textwrap.dedent(texto[posicaoInicio:posicaoFim]).rstrip()
 
 
+# ---------- páginas ----------
+
 @app.route("/")
 def inicio():
     return render_template(
         "home.html",
         semana=resumo_semana(),
-        nomes=va.nomesEstados,
-        numero=va.formatar_numero,
+        disponivel=periodo(),
         analises=va.listar_analises()[:3],
     )
 
@@ -89,8 +176,6 @@ def como_funciona():
         "como_funciona.html",
         semana=resumo_semana(),
         codigos=codigos,
-        nomes=va.nomesEstados,
-        numero=va.formatar_numero,
         constantes={
             "dtMaximoSeg": va.dtMaximoSeg,
             "minimoIntervalos": va.minimoIntervalos,
@@ -101,11 +186,14 @@ def como_funciona():
 @app.route("/gerar-analise", methods=["GET", "POST"])
 def gerar_analise():
     erro = None
+    erroTipo = None
     disponivel = periodo()
+
+    # links como "Analisar 03/11" no quadro da semana já chegam com o período preenchido
     campos = {
-        "nome": "",
-        "inicio": disponivel["inicio"].strftime(va.formatoCampoData),
-        "fim": disponivel["fim"].strftime(va.formatoCampoData),
+        "nome": request.args.get("nome", ""),
+        "inicio": request.args.get("inicio") or disponivel["inicio"].strftime(va.formatoCampoData),
+        "fim": request.args.get("fim") or disponivel["fim"].strftime(va.formatoCampoData),
     }
 
     if request.method == "POST":
@@ -121,15 +209,17 @@ def gerar_analise():
             return redirect(url_for("ver_analise", identificador=analise["id"]))
         except va.AgroTechError as e:
             erro = str(e)
+            erroTipo = type(e).__name__
 
     return render_template(
         "gerar_analise.html",
         erro=erro,
+        erro_tipo=erroTipo,
         campos=campos,
         disponivel=disponivel,
-        arquivo=arquivoDados,
+        dias=dias_do_periodo(disponivel),
+        formato=va.formatoCampoData,
         analises=va.listar_analises(),
-        numero=va.formatar_numero,
     )
 
 
@@ -142,9 +232,7 @@ def ver_analise(identificador):
     return render_template(
         "analise.html",
         analise=analise,
-        dias=va.linha_do_tempo_por_dia(analise["linha_do_tempo"]),
-        nomes=va.nomesEstados,
-        numero=va.formatar_numero,
+        dias=grade_detalhada(analise["linha_do_tempo"]),
     )
 
 
