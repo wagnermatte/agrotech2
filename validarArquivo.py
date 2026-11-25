@@ -12,6 +12,7 @@ import os
 import math
 from datetime import datetime
 
+
 mapaColunas = {
     "tempo": ["timestamps", "timestamp"],
     "estado": ["STATE", "operational_state"],
@@ -36,7 +37,7 @@ estadoDesconhecido = "desconhecido"
 dtMaximoSeg = 5
 minimoIntervalos = 60
 formatoTempo = "%Y-%m-%d %H:%M:%S"
-arquivoPadrao = "telemetria_teste_300.csv"
+arquivoPadrao = "telemetria_168h.csv"
 
 
 class AgroTechError(Exception):
@@ -84,7 +85,6 @@ def ler_csv(caminho):
             encoding="utf-8-sig",
             newline=""
         ) as arquivo:
-
             leitor = csv.DictReader(arquivo)
 
             if leitor.fieldnames is None:
@@ -100,10 +100,11 @@ def ler_csv(caminho):
                 )
 
             return registros
+
     except AgroTechError:
         raise
 
-    except(OSError, UnicodeDecodeError, csv.Error) as erro:
+    except (OSError, UnicodeDecodeError, csv.Error) as erro:
         raise ArquivoInvalidoError(
             f"Não foi possível ler o arquivo: {erro}"
         ) from erro
@@ -118,7 +119,6 @@ def validar_colunas(registros):
         )
 
     colunasArquivo = list(registros[0].keys())
-
     colunasEncontradas = {}
 
     for nomePadrao, alternativas in mapaColunas.items():
@@ -362,26 +362,44 @@ def calcular_permanencia_estados(intervalos):
 
 # calcular mínimo e máximo dos valores numéricos válidos
 
-def calcular_extremos(registros, coluna):
+def calcular_extremos(registros, coluna, estadosPermitidos=None):
     valores = []
 
     for registro in registros:
+        if estadosPermitidos is not None:
+            if registro.get("estado") not in estadosPermitidos:
+                continue
+
         valor = registro.get(coluna)
 
         if valor is not None and math.isfinite(valor):
             valores.append(valor)
 
     if not valores:
-        return {"minimo": None, "maximo": None}
+        return {"minimo": None, "media": None, "maximo": None}
 
-    return {"minimo": min(valores), "maximo": max(valores)}
+    return {
+        "minimo": min(valores),
+        "media": sum(valores) / len(valores),
+        "maximo": max(valores),
+    }
 
 
 def calcular_metricas(registros, intervalos):
+    velocidade = calcular_extremos(registros, "velocidade")
+
+    velocidadeEmOperacao = calcular_extremos(
+        registros,
+        "velocidade",
+        estadosPermitidos=["Working", "Turning", "Moving"]
+    )
+
+    velocidade["media"] = velocidadeEmOperacao["media"]
+
     return {
         "permanencia": calcular_permanencia_estados(intervalos),
         "rpm": calcular_extremos(registros, "rpm"),
-        "velocidade": calcular_extremos(registros, "velocidade"),
+        "velocidade": velocidade,
     }
 
 
@@ -411,12 +429,18 @@ def exibir_metricas(metricas):
         )
 
     print("\nROTAÇÃO DO MOTOR (RPM)")
-    print(f"Mínima: {formatar_numero(metricas['rpm']['minimo'])}")
-    print(f"Máxima: {formatar_numero(metricas['rpm']['maximo'])}")
+    print(f"RPM médio: {formatar_numero(metricas['rpm']['media'])}")
+    print(f"RPM máximo: {formatar_numero(metricas['rpm']['maximo'])}")
 
     print("\nVELOCIDADE (unidade original do CSV)")
-    print(f"Mínima: {formatar_numero(metricas['velocidade']['minimo'])}")
-    print(f"Máxima: {formatar_numero(metricas['velocidade']['maximo'])}")
+    print(
+        f"Velocidade média em operação: "
+        f"{formatar_numero(metricas['velocidade']['media'])}"
+    )
+    print(
+        f"Velocidade máxima: "
+        f"{formatar_numero(metricas['velocidade']['maximo'])}"
+    )
 
 
 # processar arquivo completo
@@ -456,6 +480,7 @@ if __name__ == "__main__":
 
         print("Arquivo processado com sucesso.")
         print(f"Quantidade de intervalos válidos: {len(intervalos)}")
+
         exibir_metricas(resultado["metricas"])
 
     except AgroTechError as erro:
