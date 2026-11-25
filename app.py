@@ -2,6 +2,8 @@
 # Para rodar: .venv/bin/python app.py  e abrir http://127.0.0.1:5001
 
 import inspect
+import json
+import os
 import textwrap
 from datetime import datetime, timedelta
 
@@ -127,6 +129,26 @@ def codigo(funcao):
     return inspect.getsource(funcao).strip()
 
 
+# mostra como a análise mais recente está gravada no disco
+# (a linha do tempo é cortada em 2 horas para caber na página)
+def exemplo_analise():
+    analises = va.listar_analises()
+    if not analises:
+        return None
+
+    analise = dict(analises[0])
+    horas = len(analise.get("linha_do_tempo", []))
+    analise["linha_do_tempo"] = analise.get("linha_do_tempo", [])[:2]
+
+    return {
+        "id": analise["id"],
+        "texto": json.dumps(analise, ensure_ascii=False, indent=2),
+        "horas": horas,
+        "tamanho": os.path.getsize(os.path.join(va.pastaAnalises, analise["id"] + ".json")),
+        "quantidade": len(analises),
+    }
+
+
 # recorta um pedaço de um arquivo, entre dois textos
 def trecho(nomeArquivo, comeco, fim):
     with open(nomeArquivo, encoding="utf-8") as arquivo:
@@ -169,6 +191,7 @@ def como_funciona():
         "processar_periodo": codigo(va.processar_periodo),
         "calcular_linha_do_tempo": codigo(va.calcular_linha_do_tempo),
         "salvar_analise": codigo(va.salvar_analise),
+        "carregar_analise": codigo(va.listar_analises) + "\n\n\n" + codigo(va.carregar_analise),
         "gerador": trecho("telemetriaCriar.py", "        # Operação simulada", "        escritor.writerow"),
     }
 
@@ -180,6 +203,8 @@ def como_funciona():
             "dtMaximoSeg": va.dtMaximoSeg,
             "minimoIntervalos": va.minimoIntervalos,
         },
+        exemplo=exemplo_analise(),
+        pastaAnalises=va.pastaAnalises,
     )
 
 

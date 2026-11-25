@@ -69,24 +69,24 @@
       </div>
       <div class="numero">
         <strong>80%</strong>
-        <p>das perdas na colheita de soja vêm da plataforma de corte, ou seja, de regulagem e operação da máquina.</p>
+        <p>das perdas na colheita de soja vêm da plataforma de corte do maquinário, ou seja, de regulagem e operação da máquina.</p>
         <small>Embrapa Soja e Emater-PR, <a href="https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/470819/1/Transferenciadetecnologiasemprevencaodeperdasnacolheitanaculturadasoja.pdf" target="_blank" rel="noopener">mesmo estudo</a></small>
       </div>
       <div class="numero">
         <strong>53%</strong>
-        <p>das máquinas cadastradas em três concessionárias tinham telemetria ativa em 2022. A outra metade não registrava nada.</p>
+        <p>das máquinas cadastradas em três concessionárias tinham telemetria ativa em 2022. A outra metade não registrava nada. Quem tem o dado enxerga longe.</p>
         <small>Santos, UFV, 2023, <a href="https://locus.ufv.br//handle/123456789/31338" target="_blank" rel="noopener">Telemetria na região central do Brasil</a></small>
       </div>
       <div class="numero">
-        <strong>1,06 × 1,40</strong>
-        <p>sacas/ha perdidas por operador treinado contra sem treinamento, no Paraná, safra 2022/23. Quem tem informação perde menos.</p>
+        <strong>até 1,40</strong>
+        <p>sacas/ha perdidas por operador sem treinamento, no Paraná, safra 2022/23. Operadores treinados perdem em média 1,06 sacas/ha. Quem tem informação perde menos.</p>
         <small>Embrapa Soja, <a href="https://ainfo.cnptia.embrapa.br/digital/bitstream/doc/1168770/1/p-11-Resumos-RPS-2024-4.pdf" target="_blank" rel="noopener">monitoramento de perdas 2022/23</a></small>
       </div>
     </div>
 
     <div class="bagunca">
       <div class="cabeca-dupla">
-        <h3 class="h-menor" style="margin:0">E quando o dado existe, ele chega bagunçado.</h3>
+        <h3 class="h-menor" style="margin:0">E, na maioria das vezes, quando o dado existe, ele chega bagunçado e desestruturado.</h3>
         <p class="suave">Cada fabricante dá um nome para a mesma coluna. Estados vêm em código, números usam vírgula ou ponto, há linhas repetidas, fora de ordem e buracos sem registro. Antes de qualquer gráfico, alguém precisa arrumar isso e deixar claras as regras da conta. É isso que o AgroTech faz.</p>
       </div>
       <div class="antes-depois">
@@ -119,7 +119,7 @@
 <section class="secao branca" id="hoje">
   <div class="container">
     <span class="rotulo">02 · O que faz hoje</span>
-    <h2>O MVP faz pouco, e faz com regra.</h2>
+    <h2>O MVP faz o simples e já entrega dados valiosos.</h2>
     <div class="texto">
       <p>Cada número na tela vem de uma regra escrita no código. Clique num item para ver o passo correspondente.</p>
     </div>
@@ -167,7 +167,7 @@
   ("v1", "Alertas", "RPM ou velocidade fora dos limites"),
   ("v1", "Alertas", "Utilização produtiva abaixo da meta"),
   ("v1", "Relatórios", "Exportar os dados em CSV"),
-  ("futuro", "Dados", "Integração autorizada com John Deere Operations Center"),
+  ("futuro", "Dados", "Integração autorizada direto com a John Deere Operations Center"),
   ("futuro", "Dados", "Integração com outros fabricantes por API"),
   ("futuro", "Dados", "Leitura direta do trator pelo barramento CAN/ISOBUS com módulo de telemetria"),
   ("futuro", "Operação", "Contas de usuário com acesso só às próprias propriedades"),
@@ -386,10 +386,56 @@
           <article class="passo" id="p16">
             <div>
               <h3><span>16</span>Guardar para abrir depois</h3>
-              <p><code>salvar_analise</code> grava o resultado num arquivo <code>.json</code> dentro da pasta <code>analises</code>. O nome do arquivo é a data e a hora da criação.</p>
-              <p class="suave">Ainda não há banco de dados no MVP, e o JSON resolve: é texto legível, o Python lê e escreve com a biblioteca padrão, e o PDF é gerado a partir dele quando você pede (<code>gerar_pdf</code>).</p>
+              <p><code>salvar_analise</code> grava cada análise como um arquivo <code>.json</code> na pasta <code>{{ pastaAnalises }}/</code>. Não há banco de dados no MVP: o JSON é texto legível, e o Python lê e escreve esse formato com a biblioteca padrão.</p>
+
+              <dl class="ficha-tecnica">
+                <div>
+                  <dt>Onde fica</dt>
+                  <dd>Na pasta <code>{{ pastaAnalises }}/</code>, no disco do computador que roda o site. Um arquivo por análise{% if exemplo %}, hoje {{ exemplo.quantidade }} {{ 'arquivo' if exemplo.quantidade == 1 else 'arquivos' }}{% endif %}.</dd>
+                </div>
+                <div>
+                  <dt>Nome do arquivo</dt>
+                  <dd>A data e a hora da criação, no formato <code>AAAAMMDD-HHMMSS.json</code>. Esse nome também é o endereço da análise: <code>/analise/AAAAMMDD-HHMMSS</code>.</dd>
+                </div>
+                <div>
+                  <dt>O que vai dentro</dt>
+                  <dd>Só o resultado: nome, período, arquivo de origem, data de criação, indicadores, tempo em cada estado, RPM, velocidade, a linha do tempo hora a hora e o tempo de motor desligado. As 600 mil linhas brutas não são copiadas, por isso cada arquivo tem poucos KB{% if exemplo %} (o mais recente tem {{ numero(exemplo.tamanho / 1024) }} KB){% endif %}.</dd>
+                </div>
+                <div>
+                  <dt>Como a lista é montada</dt>
+                  <dd><code>listar_analises</code> lê a pasta e ordena os nomes ao contrário. Como o nome é a data e a hora, a análise mais nova aparece primeiro, sem precisar de outro campo de ordem.</dd>
+                </div>
+                <div>
+                  <dt>Proteção ao abrir</dt>
+                  <dd><code>carregar_analise</code> só aceita letras, números e hífen no identificador. Um identificador com ponto ou barra, como <code>../app</code>, é recusado antes de qualquer leitura, e por isso ninguém abre arquivos fora da pasta pelo endereço.</dd>
+                </div>
+                <div>
+                  <dt>E o PDF?</dt>
+                  <dd>Não fica salvo. A cada clique em "Baixar PDF", <code>gerar_pdf</code> monta o documento na hora a partir do JSON, com a biblioteca fpdf2. Assim existe uma única cópia dos dados.</dd>
+                </div>
+                <div>
+                  <dt>Versões antigas</dt>
+                  <dd>Análises salvas antes da versão atual não têm os minutos por hora nem o motor desligado. Elas continuam abrindo: a página só esconde o que falta.</dd>
+                </div>
+                <div>
+                  <dt>Limites</dt>
+                  <dd>A pasta fica fora do Git (<code>.gitignore</code>), não é compartilhada entre computadores e não tem controle de quem vê o quê. Em hospedagens sem disco permanente, como o plano gratuito do Render, ela é apagada a cada deploy. Na V1, o plano é trocar por SQLite ou PostgreSQL.</dd>
+                </div>
+              </dl>
             </div>
-            {{ bloco("validarArquivo.py", codigos.salvar_analise) }}
+
+            <div class="codigo-pilha">
+              {{ bloco("validarArquivo.py", codigos.salvar_analise, codigos.carregar_analise) }}
+              {% if exemplo %}
+              <div class="codigo" data-codigo>
+                <div class="codigo-barra"><span class="pontos" aria-hidden="true"><i></i><i></i><i></i></span><span>{{ pastaAnalises }}/{{ exemplo.id }}.json</span></div>
+                <div class="codigo-corpo">
+                  <pre tabindex="0"><code class="language-json">{{ exemplo.texto }}</code></pre>
+                </div>
+              </div>
+              <p class="nota-codigo">Arquivo real da análise mais recente{% if exemplo.horas > 2 %}, com a linha do tempo cortada em 2 das {{ exemplo.horas }} horas{% endif %}.</p>
+              {% endif %}
+            </div>
           </article>
         </div>
 
@@ -403,7 +449,7 @@
 <section class="secao escura" id="tecnico">
   <div class="container">
     <span class="rotulo">05 · Resumo técnico</span>
-    <h2>Quatro camadas, um arquivo cada.</h2>
+    <h2>Quatro etapas no sistema: do CSV aos insights.</h2>
 
     <ol class="camadas">
       <li><span>1 → Entrada</span>Recebe o CSV e confere se dá para ler.<code>ler_csv · validar_arquivo</code></li>

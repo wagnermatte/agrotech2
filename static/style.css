@@ -483,3 +483,13 @@ input[aria-invalid="true"] { border-color: var(--desconhecido); }
   .topo, .rodape, .acoes, .legenda, .pular { display: none !important; }
   body { background: #fff; }
 }
+
+/* passo 16: ficha de como as análises ficam guardadas */
+.ficha-tecnica { margin: 4px 0 0; display: grid; gap: 0; border-top: 1px solid var(--linha); }
+.ficha-tecnica > div { padding: 12px 0; border-bottom: 1px solid var(--linha); }
+.ficha-tecnica dt { font-weight: 700; font-size: .92rem; margin-bottom: 4px; }
+.ficha-tecnica dd { margin: 0; font-size: .92rem; color: var(--tinta-suave); line-height: 1.5; }
+.ficha-tecnica dd code { color: var(--tinta); }
+.codigo-pilha { flex: 1.5 1 380px; min-width: 0; display: grid; gap: 12px; align-self: flex-start; }
+.codigo-pilha .codigo { width: 100%; }
+.nota-codigo { margin: 0; font-size: .85rem; color: var(--tinta-suave); }
