@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_grade.html" import grade %}
+
+{% block titulo %}AgroTech | Telemetria de máquinas agrícolas{% endblock %}
+
+{% block conteudo %}
+
+<section class="hero">
+  <div class="container">
+    <h1>Quanto da semana a máquina trabalhou e quanto ficou parada?</h1>
+    <div class="texto">
+      <p>A partir da telemetria de uma máquina agrícola, o sistema separa trabalho, manobra, deslocamento e parada, e mostra quanto do tempo foi produtivo. Cada número vem de uma regra que dá para conferir no código.</p>
+    </div>
+    <div class="acoes-hero">
+      <a class="botao" href="{{ url_for('gerar_analise') }}">Gerar uma análise</a>
+      <a class="botao secundario" href="{{ url_for('como_funciona') }}">Ver como funciona</a>
+    </div>
+
+    <div class="resultado-semana">
+      <div><strong>{{ numero(semana.indicadores.utilizacao_produtiva) }}%</strong>do tempo trabalhando</div>
+      <div><strong>{{ numero(semana.indicadores.taxa_parada) }}%</strong>do tempo parada</div>
+      <div><strong>{{ numero(semana.metricas.velocidade.media) }}</strong>velocidade média em operação</div>
+      <div><strong>168 h</strong>de registros analisados</div>
+    </div>
+    <p class="suave nota">Resultado da máquina MAQ001 entre 1 e 8 de novembro de 2026, com dados simulados.</p>
+  </div>
+</section>
+
+<section class="secao branca">
+  <div class="container">
+    <h2>Do arquivo ao relatório em três passos</h2>
+    <ol class="tres-passos">
+      <li>
+        <h3>Os dados entram</h3>
+        <p>O sistema lê o CSV de telemetria, confere se está completo e padroniza datas, números e estados de fontes diferentes.</p>
+      </li>
+      <li>
+        <h3>Você escolhe o período</h3>
+        <p>Um turno, um dia ou a semana inteira. Buracos sem registro ficam fora da conta, então nenhuma hora vazia vira hora trabalhada.</p>
+      </li>
+      <li>
+        <h3>Os indicadores saem</h3>
+        <p>Utilização produtiva, taxa de parada, RPM e velocidade. A análise fica salva para abrir depois ou baixar em PDF.</p>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section class="secao">
+  <div class="container">
+    <h2>A semana da MAQ001</h2>
+    <div class="texto">
+      <p>Cada quadrado é uma hora. A cor mostra o que a máquina mais fez naquela hora: dá para ver o turno das 7h às 18h se repetindo todos os dias.</p>
+    </div>
+    {{ grade(semana.dias, nomes) }}
+    <p class="mt-m"><a href="{{ url_for('como_funciona') }}#codigo">Ver o código que monta este quadro</a></p>
+  </div>
+</section>
+
+<section class="secao branca">
+  <div class="container">
+    <h2>Últimas análises</h2>
+    {% if analises %}
+    <ul class="salvas">
+      {% for a in analises %}
+      <li>
+        <div class="info">
+          <a href="{{ url_for('ver_analise', identificador=a.id) }}">{{ a.nome }}</a>
+          <small>{{ a.inicio[8:10] }}/{{ a.inicio[5:7] }} {{ a.inicio[11:16] }} até {{ a.fim[8:10] }}/{{ a.fim[5:7] }} {{ a.fim[11:16] }}. Utilização produtiva de {{ numero(a.indicadores.utilizacao_produtiva) }}%.</small>
+        </div>
+        <div class="acoes">
+          <a class="botao secundario" href="{{ url_for('ver_analise', identificador=a.id) }}">Abrir</a>
+          <a class="botao secundario" href="{{ url_for('baixar_pdf', identificador=a.id) }}">Baixar PDF</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="mt-m"><a href="{{ url_for('gerar_analise') }}">Ver todas e gerar uma nova</a></p>
+    {% else %}
+    <p class="suave">Nenhuma análise salva ainda. Escolha um período e o resultado aparece aqui.</p>
+    <p><a class="botao" href="{{ url_for('gerar_analise') }}">Gerar a primeira análise</a></p>
+    {% endif %}
+  </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+{% from "_grade.html" import grade %}
+
+{% block titulo %}Como funciona | AgroTech{% endblock %}
+
+{% block conteudo %}
+
+{# ================= ABERTURA ================= #}
+<section class="hero">
+  <div class="container">
+    <h1>Uma semana de trator, hora por hora.</h1>
+    <div class="texto">
+      <p>Cada quadrado abaixo é uma hora da máquina MAQ001 entre 1 e 8 de novembro de 2026. A cor mostra o estado em que ela passou mais tempo naquela hora.</p>
+      <p class="suave">O quadro foi calculado agora pelo nosso código, a partir de {{ "{:,}".format(semana.quantidade_intervalos).replace(",", ".") }} intervalos de telemetria. Os dados são <b>simulados</b> pelo arquivo <code>telemetriaCriar.py</code>, como explicado mais abaixo.</p>
+    </div>
+    {{ grade(semana.dias, nomes) }}
+  </div>
+</section>
+
+
+{# ================= 1. O PROBLEMA ================= #}
+<section class="secao escura">
+  <div class="container">
+    <h2>A máquina gera dados. Pouca gente consegue usá-los.</h2>
+    <div class="texto">
+      <p>Tratores, plantadeiras, pulverizadores e colheitadeiras registram velocidade, rotação do motor, posição e o que estavam fazendo a cada segundo. Esses registros raramente chegam organizados a quem decide, e perguntas simples ficam sem resposta: quanto tempo a máquina trabalhou? Quanto ficou parada de motor ligado? A operação desta semana foi melhor que a da anterior?</p>
+    </div>
+
+    <div class="numeros">
+      <div class="numero">
+        <strong>14%</strong>
+        <p>dos alimentos produzidos no mundo se perdem entre a colheita e o varejo.</p>
+        <small>FAO, <a href="https://www.fao.org/director-general/speeches/details/Launch-of-the-State-of-Food-and-Agriculture-report-SOFA-2019/en" target="_blank" rel="noopener">The State of Food and Agriculture 2019</a></small>
+      </div>
+      <div class="numero">
+        <strong>2 sacas/ha</strong>
+        <p>é a perda média estimada na colheita de soja no Brasil, o dobro do limite tolerável de 1 saca por hectare. Na safra 2004/05, isso somou cerca de 44 milhões de sacas.</p>
+        <small>Embrapa Soja, <a href="https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/470819/1/Transferenciadetecnologiasemprevencaodeperdasnacolheitanaculturadasoja.pdf" target="_blank" rel="noopener">prevenção de perdas na colheita</a></small>
+      </div>
+      <div class="numero">
+        <strong>80%</strong>
+        <p>das perdas na colheita de soja vêm da plataforma de corte da colhedora, ou seja, de regulagem e operação da máquina.</p>
+        <small>Embrapa Soja e Emater-PR, <a href="https://www.alice.cnptia.embrapa.br/alice/bitstream/doc/470819/1/Transferenciadetecnologiasemprevencaodeperdasnacolheitanaculturadasoja.pdf" target="_blank" rel="noopener">mesmo estudo</a></small>
+      </div>
+      <div class="numero">
+        <strong>53%</strong>
+        <p>das máquinas cadastradas em três concessionárias estavam com a telemetria ativa e gerando dados em 2022. A outra metade não registrava nada.</p>
+        <small>Santos, UFV, 2023, <a href="https://locus.ufv.br//handle/123456789/31338" target="_blank" rel="noopener">Telemetria na região central do Brasil</a></small>
+      </div>
+      <div class="numero">
+        <strong>1,06 × 1,40</strong>
+        <p>sacas por hectare perdidas por operador treinado contra operador sem treinamento, no Paraná, safra 2022/23. Quem tem informação perde menos.</p>
+        <small>Embrapa Soja, <a href="https://ainfo.cnptia.embrapa.br/digital/bitstream/doc/1168770/1/p-11-Resumos-RPS-2024-4.pdf" target="_blank" rel="noopener">monitoramento de perdas 2022/23</a></small>
+      </div>
+    </div>
+
+    <div class="texto">
+      <h3>E quando o dado existe, ele chega bagunçado</h3>
+      <p>Cada fabricante dá um nome diferente para a mesma coluna (<code>timestamps</code> ou <code>timestamp</code>, <code>STATE</code> ou <code>operational_state</code>). Estados vêm em código (<code>W</code>, <code>T</code>, <code>I</code>). Números usam vírgula ou ponto. Há linhas repetidas, horários fora de ordem e buracos de minutos sem registro. Se a conta for feita em cima disso sem cuidado, um buraco de duas horas vira "duas horas trabalhando".</p>
+      <p>Antes de qualquer gráfico, alguém precisa arrumar os dados e deixar claras as regras da conta. É isso que o AgroTech faz.</p>
+    </div>
+  </div>
+</section>
+
+
+{# ================= 2a. O QUE O MVP FAZ HOJE ================= #}
+<section class="secao branca" id="hoje">
+  <div class="container">
+    <h2>O que o AgroTech faz hoje</h2>
+    <div class="texto">
+      <p>Este é o MVP. Faz pouca coisa, mas cada número na tela vem de uma regra escrita no código, e você pode conferir todas mais abaixo.</p>
+    </div>
+
+    <ul class="lista-hoje">
+      <li><b>Lê o CSV de telemetria</b><span>Aceita colunas com nomes diferentes de fontes diferentes e identifica tempo, estado, velocidade e RPM.</span></li>
+      <li><b>Confere o arquivo</b><span>Verifica se ele existe, se é <code>.csv</code>, se não está vazio, se tem cabeçalho e se tem as colunas obrigatórias.</span></li>
+      <li><b>Limpa os dados</b><span>Converte horários, traduz estados (<code>W</code> vira Trabalhando), aceita vírgula decimal, remove linhas duplicadas e ordena por horário.</span></li>
+      <li><b>Mede o tempo com honestidade</b><span>Só conta intervalos de até {{ constantes.dtMaximoSeg }} segundos entre um registro e o próximo. Buracos maiores não viram tempo de trabalho. Exige pelo menos {{ constantes.minimoIntervalos }} intervalos válidos.</span></li>
+      <li><b>Calcula indicadores</b><span>Percentual de tempo em cada estado, utilização produtiva, taxa de parada, RPM médio e máximo, velocidade média em operação e máxima.</span></li>
+      <li><b>Analisa um período e guarda</b><span>Você escolhe o intervalo de datas, a análise fica salva e pode ser aberta de novo ou baixada em PDF.</span></li>
+      <li><b>Duas interfaces</b><span>Uma janela de computador (<code>interface.py</code>, com tkinter) e este site local (<code>app.py</code>, com Flask).</span></li>
+    </ul>
+
+    <h3>Resultado da semana inteira</h3>
+    <div class="resultado-semana">
+      <div><strong>{{ numero(semana.indicadores.utilizacao_produtiva) }}%</strong>utilização produtiva</div>
+      <div><strong>{{ numero(semana.indicadores.taxa_parada) }}%</strong>taxa de parada</div>
+      <div><strong>{{ numero(semana.metricas.velocidade.media) }}</strong>velocidade média em operação</div>
+      <div><strong>{{ numero(semana.metricas.rpm.maximo) }}</strong>RPM máximo</div>
+    </div>
+
+    <div class="texto mt-l">
+      <p class="suave"><b>Ainda não faz:</b> consulta de clima pela API Open-Meteo, gráficos interativos, banco de dados e análise de várias máquinas ao mesmo tempo. Tudo isso está na lista abaixo.</p>
+      <p><a class="botao" href="{{ url_for('gerar_analise') }}">Gerar uma análise</a></p>
+    </div>
+  </div>
+</section>
+
+
+{# ================= 2b. TUDO O QUE O SISTEMA PODE FAZER ================= #}
+<section class="secao" id="futuro">
+  <div class="container">
+    <h2>O que o AgroTech pode fazer</h2>
+    <div class="texto">
+      <p>O MVP é a base. A mesma estrutura de dados (tempo, estado, velocidade, RPM) recebe novas fontes e novas análises sem mudar as regras centrais. As etiquetas mostram quando cada item entra: <span class="etapa ja">já funciona</span>, <span class="etapa v1">V1</span> (próxima versão, prevista no projeto) ou <span class="etapa futuro">futuro</span>.</p>
+    </div>
+
+    <div class="grupos">
+      <div>
+        <h3>Dados e integrações</h3>
+        <ul>
+          <li>Importar CSV de telemetria de diferentes fabricantes <span class="etapa ja">já funciona</span></li>
+          <li>Clima por coordenadas pela API Open-Meteo (temperatura, chuva, vento) <span class="etapa v1">V1</span></li>
+          <li>Conector padrão: cada nova fonte é convertida para o mesmo formato interno <span class="etapa v1">V1</span></li>
+          <li>Integração autorizada com John Deere Operations Center <span class="etapa futuro">futuro</span></li>
+          <li>Integração com outros fabricantes por API <span class="etapa futuro">futuro</span></li>
+          <li>Leitura direta do trator pelo barramento CAN/ISOBUS com módulo de telemetria <span class="etapa futuro">futuro</span></li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Gestão da operação</h3>
+        <ul>
+          <li>Cadastro de fazendas, áreas e equipamentos <span class="etapa v1">V1</span></li>
+          <li>Operações ligadas a máquina, atividade e período <span class="etapa v1">V1</span></li>
+          <li>Painel da frota com o estado de cada máquina <span class="etapa v1">V1</span></li>
+          <li>Mapa com as trajetórias GPS registradas <span class="etapa v1">V1</span></li>
+          <li>Banco de dados (SQLite ou PostgreSQL) <span class="etapa v1">V1</span></li>
+          <li>Contas de usuário com acesso só às próprias propriedades <span class="etapa futuro">futuro</span></li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Análises e cruzamento de dados</h3>
+        <ul>
+          <li>Tempo por estado, utilização produtiva e taxa de parada <span class="etapa ja">já funciona</span></li>
+          <li>Análise de qualquer período escolhido <span class="etapa ja">já funciona</span></li>
+          <li>Hectares por hora, quando houver área trabalhada <span class="etapa v1">V1</span></li>
+          <li>Comparar máquinas e períodos lado a lado <span class="etapa v1">V1</span></li>
+          <li>Comparar talhões <span class="etapa futuro">futuro</span></li>
+          <li>Cruzar clima e operação para planejar o trabalho <span class="etapa futuro">futuro</span></li>
+          <li>Consumo de combustível por atividade <span class="etapa futuro">futuro</span></li>
+          <li>Manutenção preventiva por horas de motor e RPM <span class="etapa futuro">futuro</span></li>
+          <li>Modelos que preveem paradas e queda de rendimento <span class="etapa futuro">futuro</span></li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Alertas e notificações</h3>
+        <ul>
+          <li>Máquina parada por mais tempo que o limite definido <span class="etapa v1">V1</span></li>
+          <li>Máquina sem enviar registros recentes <span class="etapa v1">V1</span></li>
+          <li>RPM ou velocidade fora dos limites <span class="etapa v1">V1</span></li>
+          <li>Utilização produtiva abaixo da meta <span class="etapa v1">V1</span></li>
+          <li>Avisos por e-mail, WhatsApp ou notificação no celular <span class="etapa futuro">futuro</span></li>
+        </ul>
+      </div>
+
+      <div>
+        <h3>Relatórios</h3>
+        <ul>
+          <li>Salvar análises e baixar em PDF <span class="etapa ja">já funciona</span></li>
+          <li>Exportar os dados em CSV <span class="etapa v1">V1</span></li>
+          <li>Agendar relatórios semanais ou mensais <span class="etapa futuro">futuro</span></li>
+          <li>Enviar relatórios automaticamente por e-mail <span class="etapa futuro">futuro</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+{# ================= 3. O CÓDIGO, PASSO A PASSO ================= #}
+<section class="secao branca" id="codigo">
+  <div class="container">
+    <h2>Como o código faz isso</h2>
+    <div class="texto">
+      <p>Toda a lógica fica em <code>validarArquivo.py</code>. Os trechos abaixo são lidos direto desse arquivo quando a página abre, então o que aparece aqui é exatamente o código que está rodando.</p>
+      <p>A ordem segue o caminho de um registro: do arquivo bruto até o número na tela.</p>
+    </div>
+
+    <ol class="passos">
+      <li class="passo">
+        <div>
+          <h3>De onde vêm os dados</h3>
+          <p>Para testar sem um trator de verdade, o <code class="nome">telemetriaCriar.py</code> gera 168 horas de telemetria, uma linha por segundo. Das 7h às 18h a máquina repete um ciclo de 10 minutos: 7 trabalhando, 1 manobrando, 1 deslocando e 1 parada. Fora desse horário, fica parada com o motor desligado.</p>
+          <p class="suave">O <code>random.seed(42)</code> faz o arquivo sair sempre igual, assim os resultados podem ser conferidos. O projeto exige deixar claro quando um dado é simulado (regra RF10), por isso avisamos no topo da página.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.gerador }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>O roteiro</h3>
+          <p><code class="nome">processar_arquivo</code> é a função que chama todas as outras, na ordem. Cada linha dela é um dos próximos passos. Se algum passo encontra um problema, ele levanta um erro e o processamento para ali, sem gerar número errado.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.processar_arquivo }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Abrir o arquivo com segurança</h3>
+          <p><code class="nome">ler_csv</code> chama <code class="nome">validar_arquivo</code> para conferir se o arquivo existe, termina em <code>.csv</code> e não está vazio. Depois usa <code>csv.DictReader</code>, que transforma cada linha num dicionário com o nome da coluna como chave.</p>
+          <p class="suave">O <code>encoding="utf-8-sig"</code> remove um caractere invisível que o Excel coloca no começo do arquivo. Erros do sistema operacional viram um erro nosso, com mensagem em português.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.ler_csv }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Entender colunas de fontes diferentes</h3>
+          <p>O dicionário <code class="nome">mapaColunas</code> diz que nomes cada informação pode ter. <code class="nome">validar_colunas</code> compara esses nomes com o cabeçalho do arquivo, sem diferenciar maiúsculas e minúsculas, e devolve qual coluna corresponde a quê.</p>
+          <p class="suave">Tempo e estado são obrigatórios. Velocidade e RPM são opcionais: se faltarem, as outras análises continuam funcionando (regra RF01). Para aceitar um novo fabricante, basta acrescentar o nome da coluna dele na lista.</p>
+        </div>
+        <div>
+          <pre tabindex="0"><code class="language-python">{{ codigos.mapas }}</code></pre>
+          <pre class="junto" tabindex="0"><code class="language-python">{{ codigos.validar_colunas }}</code></pre>
+        </div>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Transformar texto em horário</h3>
+          <p>No CSV tudo é texto. <code class="nome">validar_timestamps</code> usa <code>datetime.strptime</code> para converter <code>"2026-11-01 07:00:00"</code> num horário de verdade, que permite fazer contas e ordenar.</p>
+          <p class="suave">Uma linha com horário inválido é descartada com <code>continue</code>, em vez de travar o programa. Se nenhuma linha sobrar, aí sim é erro.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.validar_timestamps }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Traduzir os estados</h3>
+          <p><code class="nome">normalizar_estados</code> tira espaços, passa para maiúsculas e procura o código no <code class="nome">mapaEstados</code>. Assim <code>W</code>, <code>w</code> e <code>Working</code> viram o mesmo estado.</p>
+          <p class="suave">O <code>.get(..., estadoDesconhecido)</code> garante que um código estranho vire "desconhecido" em vez de sumir. Ele aparece no resultado para ninguém ser enganado.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.normalizar_estados }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Ler números com vírgula ou ponto</h3>
+          <p><code class="nome">converter_numero</code> troca a vírgula por ponto antes de converter para <code>float</code>, porque planilhas brasileiras usam vírgula.</p>
+          <p class="suave">Quando o valor está vazio ou inválido, a função devolve <code>None</code>, nunca zero. Um zero inventado puxaria a média para baixo. O projeto exige mostrar "indisponível" em vez de inventar um número (regra RF07).</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.converter_numero }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Tirar linhas repetidas</h3>
+          <p><code class="nome">remover_duplicatas</code> transforma cada registro numa tupla e guarda as que já viu num <code>set</code>. Se a mesma linha aparecer de novo, é ignorada.</p>
+          <p class="suave">O <code>set</code> foi escolhido porque verificar se um item está nele é praticamente instantâneo, mesmo com 600 mil linhas. Com uma lista, o programa ficaria muito mais lento.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.remover_duplicatas }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Medir o tempo entre registros</h3>
+          <p>Depois de ordenar por horário (<code class="nome">ordenar_registros</code>), <code class="nome">validar_intervalos</code> calcula quantos segundos se passaram entre cada registro e o anterior. Esse é o tempo que a máquina ficou naquele estado.</p>
+          <p class="suave">Só valem intervalos maiores que 0 e de até <code>dtMaximoSeg</code> ({{ constantes.dtMaximoSeg }} s). Se o sensor ficou duas horas sem enviar nada, esse buraco não é contado como trabalho (regra RF04).</p>
+        </div>
+        <div>
+          <pre tabindex="0"><code class="language-python">{{ codigos.constantes }}</code></pre>
+          <pre class="junto" tabindex="0"><code class="language-python">{{ codigos.validar_intervalos }}</code></pre>
+        </div>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Recusar dados de menos</h3>
+          <p><code class="nome">validar_quantidade_intervalos</code> exige pelo menos {{ constantes.minimoIntervalos }} intervalos válidos, cerca de um minuto de operação.</p>
+          <p class="suave">Com menos que isso, qualquer percentual seria enganoso. O projeto pede que o sistema não produza resultado com registros insuficientes.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.validar_quantidade_intervalos }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Somar o tempo de cada estado</h3>
+          <p><code class="nome">calcular_permanencia_estados</code> começa com zero segundos para cada estado e vai somando a duração de cada intervalo no estado certo. No fim, divide pelo total para obter o percentual.</p>
+          <p class="suave">A utilização produtiva é o percentual de "Trabalhando" e a taxa de parada é o de "Ocioso", conforme a seção 4.1 do projeto (<code class="nome">calcular_indicadores</code>).</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.calcular_permanencia_estados }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>RPM e velocidade</h3>
+          <p><code class="nome">calcular_metricas</code> usa <code class="nome">calcular_extremos</code> para achar mínimo, média e máximo, ignorando valores vazios.</p>
+          <p class="suave">A velocidade média considera só os estados em operação (Trabalhando, Manobrando, Deslocando). Se as horas parada entrassem na conta, a média cairia e não diria nada sobre como a máquina anda quando trabalha.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.calcular_metricas }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Erros com nome</h3>
+          <p>Todos os erros previstos herdam de <code class="nome">AgroTechError</code>. A tela só precisa de um <code>try/except AgroTechError</code> para mostrar a mensagem certa, sem esconder erros de programação inesperados.</p>
+          <p class="suave">Na página de gerar análise, tente colocar o início igual ao fim: a mensagem que aparece vem de <code>DadosInsuficientesError</code>.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.erros }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Analisar só um período</h3>
+          <p>Para a página de análise, <code class="nome">processar_periodo</code> reaproveita os mesmos passos e acrescenta <code class="nome">filtrar_por_periodo</code>, que mantém só os registros entre o início e o fim escolhidos.</p>
+          <p class="suave">Como as regras são as mesmas, a análise de um dia segue exatamente o mesmo cálculo da semana inteira.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.processar_periodo }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Desenhar a semana</h3>
+          <p><code class="nome">calcular_linha_do_tempo</code> agrupa os intervalos por hora e escolhe o estado com mais segundos naquela hora. É o que pinta o quadro do topo desta página.</p>
+          <p class="suave"><code>max(tempos, key=tempos.get)</code> devolve a chave do dicionário com o maior valor, ou seja, o estado predominante.</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.calcular_linha_do_tempo }}</code></pre>
+      </li>
+
+      <li class="passo">
+        <div>
+          <h3>Guardar para abrir depois</h3>
+          <p><code class="nome">salvar_analise</code> grava o resultado num arquivo <code>.json</code> dentro da pasta <code>analises</code>. O nome do arquivo é a data e a hora da criação.</p>
+          <p class="suave">Ainda não há banco de dados no MVP, e o JSON resolve: é texto legível, o Python lê e escreve com a biblioteca padrão, e o PDF é gerado a partir dele quando você pede (<code class="nome">gerar_pdf</code>).</p>
+        </div>
+        <pre tabindex="0"><code class="language-python">{{ codigos.salvar_analise }}</code></pre>
+      </li>
+    </ol>
+  </div>
+</section>
+
+
+{# ================= 4. FECHAMENTO TÉCNICO ================= #}
+<section class="secao escura" id="tecnico">
+  <div class="container">
+    <h2>Resumo técnico</h2>
+    <div class="texto">
+      <p>O sistema segue as quatro camadas do projeto. Cada uma tem um arquivo responsável.</p>
+    </div>
+
+    <div class="camadas">
+      <div><b>Entrada</b>Recebe o CSV e confere se dá para ler.<br><code>ler_csv</code> <code>validar_arquivo</code></div>
+      <div><b>Processamento</b>Valida, limpa, mede intervalos e calcula indicadores.<br><code>validarArquivo.py</code></div>
+      <div><b>Dados</b>Processa em memória e salva cada análise em JSON.<br><code>analises/*.json</code></div>
+      <div><b>Apresentação</b>Janela de computador e site local.<br><code>interface.py</code> <code>app.py</code> <code>templates/</code></div>
+    </div>
+
+    <div class="grupos mt-0">
+      <div>
+        <h3>Tecnologias</h3>
+        <ul>
+          <li>Python 3, com <code>csv</code>, <code>datetime</code>, <code>math</code>, <code>os</code> e <code>json</code> da biblioteca padrão</li>
+          <li>Flask, para o site local</li>
+          <li>fpdf2, para gerar o PDF</li>
+          <li>tkinter, para a janela de computador</li>
+          <li>HTML e CSS simples, sem framework</li>
+        </ul>
+        <p class="suave mt-s">O documento do projeto cita Pandas e Streamlit. No MVP preferimos a biblioteca padrão para cada passo do cálculo ficar visível no código.</p>
+      </div>
+
+      <div>
+        <h3>Como rodar</h3>
+        <div class="terminal">python3.14 -m venv .venv
+.venv/bin/pip install -r requirements.txt
+.venv/bin/python app.py</div>
+        <p class="suave mt-s">Depois abra <code>http://127.0.0.1:5001</code> no navegador.</p>
+      </div>
+
+      <div>
+        <h3>Limites conhecidos</h3>
+        <ul>
+          <li>Os dados da semana são simulados.</li>
+          <li>O RPM médio inclui as horas de motor desligado (RPM 0), o que puxa a média para baixo.</li>
+          <li>O arquivo de 168 horas tem cerca de 600 mil linhas e leva alguns segundos para processar.</li>
+          <li>Uma máquina e um arquivo por vez.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="mt-l">
+      <p>Agora que você viu como o cálculo funciona, teste com os dados da MAQ001: escolha um período e veja os indicadores.</p>
+      <p><a class="botao" href="{{ url_for('gerar_analise') }}">Gerar uma análise</a> <a class="botao secundario botao-claro" href="{{ url_for('inicio') }}">Voltar ao início</a></p>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

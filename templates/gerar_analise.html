@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+
+{% block titulo %}Gerar análise | AgroTech{% endblock %}
+
+{% block conteudo %}
+<section class="hero sem-fundo">
+  <div class="container">
+    <h1>Gerar análise</h1>
+    <div class="texto">
+      <p>Escolha o período. O sistema calcula os indicadores a partir dos dados brutos já carregados e salva o resultado para você abrir depois ou baixar em PDF.</p>
+      <p class="suave">Quer entender a conta antes? <a href="{{ url_for('como_funciona') }}#codigo">Veja o código passo a passo</a>.</p>
+    </div>
+  </div>
+</section>
+
+<div class="container layout-gerar">
+  <div class="painel">
+    <form class="formulario" method="post" onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Calculando...';">
+      {% if erro %}
+      <div class="erro" role="alert"><b>Não foi possível gerar a análise.</b><br>{{ erro }}</div>
+      {% endif %}
+
+      <label>
+        Nome da análise
+        <input type="text" name="nome" value="{{ campos.nome }}" placeholder="Ex.: Segunda-feira, turno da manhã" maxlength="80">
+      </label>
+
+      <div class="linha-datas">
+        <label>
+          Início
+          <input type="datetime-local" name="inicio" value="{{ campos.inicio }}" required>
+        </label>
+        <label>
+          Fim
+          <input type="datetime-local" name="fim" value="{{ campos.fim }}" required>
+        </label>
+      </div>
+
+      <p class="suave ajuda">
+        Dados disponíveis em <code>{{ arquivo }}</code>: de {{ disponivel.inicio.strftime('%d/%m/%Y %H:%M') }} a {{ disponivel.fim.strftime('%d/%m/%Y %H:%M') }}. O cálculo pode levar alguns segundos.
+      </p>
+
+      <div><button class="botao" type="submit">Gerar análise</button></div>
+    </form>
+  </div>
+
+  <div>
+    <h3>Análises salvas</h3>
+    {% if analises %}
+    <ul class="salvas">
+      {% for a in analises %}
+      <li>
+        <div class="info">
+          <a href="{{ url_for('ver_analise', identificador=a.id) }}">{{ a.nome }}</a>
+          <small>{{ a.inicio[8:10] }}/{{ a.inicio[5:7] }} {{ a.inicio[11:16] }} até {{ a.fim[8:10] }}/{{ a.fim[5:7] }} {{ a.fim[11:16] }}. Utilização produtiva de {{ numero(a.indicadores.utilizacao_produtiva) }}%.</small>
+        </div>
+        <div class="acoes">
+          <a class="botao secundario" href="{{ url_for('ver_analise', identificador=a.id) }}">Abrir</a>
+          <a class="botao secundario" href="{{ url_for('baixar_pdf', identificador=a.id) }}">Baixar PDF</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="suave">Nenhuma análise salva ainda. Escolha um período no formulário e clique em "Gerar análise".</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

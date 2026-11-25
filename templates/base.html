@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}AgroTech{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <a class="pular" href="#conteudo">Pular para o conteúdo</a>
+
+  {% set pagina = 'gerar_analise' if request.endpoint == 'ver_analise' else request.endpoint %}
+  <header class="topo">
+    <div class="container topo-conteudo">
+      <a class="marca" href="{{ url_for('inicio') }}">AgroTech</a>
+      <nav aria-label="Principal">
+        <a href="{{ url_for('inicio') }}" {% if pagina == 'inicio' %}class="ativo" aria-current="page"{% endif %}>Início</a>
+        <a href="{{ url_for('como_funciona') }}" {% if pagina == 'como_funciona' %}class="ativo" aria-current="page"{% endif %}>Como funciona</a>
+        <a href="{{ url_for('gerar_analise') }}" {% if pagina == 'gerar_analise' %}class="ativo" aria-current="page"{% endif %}>Gerar análise</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="conteudo">
+    {% block conteudo %}{% endblock %}
+  </main>
+
+  <footer class="rodape">
+    <div class="container rodape-grade">
+      <div>
+        <a class="marca" href="{{ url_for('inicio') }}">AgroTech</a>
+        <p>Projeto acadêmico da disciplina Linguagens de Programação. Roda localmente em Python e Flask.</p>
+      </div>
+
+      <nav aria-label="Rodapé">
+        <h2 class="rodape-titulo">Páginas</h2>
+        <ul>
+          <li><a href="{{ url_for('inicio') }}">Início</a></li>
+          <li><a href="{{ url_for('como_funciona') }}">Como funciona</a></li>
+          <li><a href="{{ url_for('como_funciona') }}#hoje">O que faz hoje</a></li>
+          <li><a href="{{ url_for('como_funciona') }}#futuro">O que pode fazer</a></li>
+          <li><a href="{{ url_for('como_funciona') }}#codigo">O código, passo a passo</a></li>
+          <li><a href="{{ url_for('gerar_analise') }}">Gerar análise</a></li>
+        </ul>
+      </nav>
+
+      <div>
+        <h2 class="rodape-titulo">Contato</h2>
+        <ul>
+          <li><a href="mailto:wagnermatte7@gmail.com">wagnermatte7@gmail.com</a></li>
+          <li><a href="https://wa.me/5566996466098" target="_blank" rel="noopener">WhatsApp</a></li>
+          <li><a href="https://www.linkedin.com/in/wagner-matheus" target="_blank" rel="noopener">LinkedIn</a></li>
+          <li><a href="https://instagram.com/wagnermatte" target="_blank" rel="noopener">Instagram</a></li>
+        </ul>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+  <script>hljs.highlightAll();</script>
+</body>
+</html>

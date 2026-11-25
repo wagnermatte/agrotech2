@@ -1,0 +1,35 @@
+{# grade de dias (linhas) x horas (colunas), cada célula pintada com o estado predominante #}
+{% macro grade(dias, nomes) %}
+<div class="grade">
+  <table aria-label="Estado predominante da máquina em cada hora, um dia por linha">
+    <thead>
+      <tr>
+        <th></th>
+        {% for h in range(24) %}<th>{{ '%02d' % h if h % 3 == 0 else '' }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for dia, horas in dias.items() %}
+      <tr>
+        <th>{{ dia[8:10] }}/{{ dia[5:7] }}</th>
+        {% for estado in horas %}
+          {% if estado %}
+          {% set rotulo %}{{ dia[8:10] }}/{{ dia[5:7] }} às {{ '%02d' % loop.index0 }}h: {{ nomes[estado] }}{% endset %}<td class="{{ estado }}" title="{{ rotulo }}" aria-label="{{ rotulo }}"></td>
+          {% else %}
+          <td title="sem dados" aria-label="sem dados"></td>
+          {% endif %}
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="legenda">
+  <span class="l-Working">Trabalhando</span>
+  <span class="l-Turning">Manobrando</span>
+  <span class="l-Moving">Deslocando</span>
+  <span class="l-Idle">Ocioso</span>
+  <span class="l-desconhecido">Desconhecido</span>
+  <span class="l-vazio">Sem dados</span>
+</div>
+{% endmacro %}

@@ -10,6 +10,7 @@
 import csv
 import os
 import math
+import json
 from datetime import datetime
 
 
@@ -469,6 +470,307 @@ def processar_arquivo(caminho):
         "intervalos": intervalos,
         "metricas": calcular_metricas(registros, intervalos),
     }
+
+
+# ============================================================
+# FUNÇÕES ADICIONADAS PARA A VERSÃO WEB (páginas /gerar-analise)
+# ============================================================
+
+pastaAnalises = "analises"
+formatoCampoData = "%Y-%m-%dT%H:%M"
+
+nomesEstados = {
+    "Working": "Trabalhando",
+    "Turning": "Manobrando",
+    "Moving": "Deslocando",
+    "Idle": "Ocioso",
+    estadoDesconhecido: "Desconhecido",
+}
+
+
+# lê o arquivo e devolve os registros já limpos e ordenados
+# (mesmos passos do processar_arquivo, antes do cálculo dos intervalos)
+
+def preparar_registros(caminho):
+    registros = ler_csv(caminho)
+    colunasEncontradas = validar_colunas(registros)
+    registros = normalizar_colunas(registros, colunasEncontradas)
+    registros = validar_timestamps(registros)
+    registros = normalizar_estados(registros)
+    registros = normalizar_valores_numericos(registros)
+    registros = remover_duplicatas(registros)
+    registros = ordenar_registros(registros)
+    return registros
+
+
+# descobre o primeiro e o último horário do arquivo
+
+def periodo_disponivel(caminho):
+    registros = preparar_registros(caminho)
+    return {
+        "inicio": registros[0]["tempo"],
+        "fim": registros[-1]["tempo"],
+    }
+
+
+# converte o texto do formulário (ex: 2026-11-01T07:00) em datetime
+
+def converter_data_formulario(texto):
+    try:
+        return datetime.strptime(texto.strip(), formatoCampoData)
+    except (ValueError, AttributeError):
+        raise DadosInsuficientesError(
+            f"Data inválida: {texto}. Use o formato dia/mês/ano e hora."
+        )
+
+
+# mantém apenas os registros dentro do período escolhido
+
+def filtrar_por_periodo(registros, inicio, fim):
+    if inicio >= fim:
+        raise DadosInsuficientesError(
+            "O início do período precisa ser antes do fim."
+        )
+
+    filtrados = []
+
+    for registro in registros:
+        if inicio <= registro["tempo"] <= fim:
+            filtrados.append(registro)
+
+    if not filtrados:
+        raise DadosInsuficientesError(
+            "Não existem registros no período escolhido."
+        )
+
+    return filtrados
+
+
+# indicadores do documento do projeto (seção 4.1)
+
+def calcular_indicadores(permanencia):
+    return {
+        "utilizacao_produtiva": permanencia["Working"]["percentual"],
+        "taxa_parada": permanencia["Idle"]["percentual"],
+    }
+
+
+# agrupa os intervalos por hora e guarda o estado que mais apareceu
+
+def calcular_linha_do_tempo(intervalos):
+    horas = {}
+
+    for intervalo in intervalos:
+        hora = intervalo["tempo"].strftime("%Y-%m-%d %H:00")
+
+        if hora not in horas:
+            horas[hora] = {}
+
+        estado = intervalo["estado"]
+        horas[hora][estado] = (
+            horas[hora].get(estado, 0) + intervalo["intervalo_segundos"]
+        )
+
+    linha = []
+
+    for hora, tempos in horas.items():
+        estadoPredominante = max(tempos, key=tempos.get)
+        linha.append({"hora": hora, "estado": estadoPredominante})
+
+    return linha
+
+
+# organiza a linha do tempo em dias (linhas) e horas (colunas)
+
+def linha_do_tempo_por_dia(linha):
+    dias = {}
+
+    for item in linha:
+        dia, hora = item["hora"].split(" ")
+        numeroHora = int(hora[:2])
+
+        if dia not in dias:
+            dias[dia] = [None] * 24
+
+        dias[dia][numeroHora] = item["estado"]
+
+    return dias
+
+
+# processa só um período do arquivo
+
+def processar_periodo(caminho, inicio, fim):
+    registros = preparar_registros(caminho)
+    registros = filtrar_por_periodo(registros, inicio, fim)
+
+    intervalos = validar_intervalos(registros)
+    validar_quantidade_intervalos(intervalos)
+
+    metricas = calcular_metricas(registros, intervalos)
+
+    return {
+        "intervalos": intervalos,
+        "metricas": metricas,
+        "indicadores": calcular_indicadores(metricas["permanencia"]),
+        "linha_do_tempo": calcular_linha_do_tempo(intervalos),
+    }
+
+
+# salva a análise em um arquivo .json dentro da pasta "analises"
+
+def salvar_analise(nome, caminho, inicio, fim, resultado):
+    os.makedirs(pastaAnalises, exist_ok=True)
+
+    criadoEm = datetime.now()
+    identificador = criadoEm.strftime("%Y%m%d-%H%M%S")
+
+    analise = {
+        "id": identificador,
+        "nome": nome or "Análise sem nome",
+        "arquivo": caminho,
+        "inicio": inicio.strftime(formatoTempo),
+        "fim": fim.strftime(formatoTempo),
+        "criado_em": criadoEm.strftime(formatoTempo),
+        "quantidade_intervalos": len(resultado["intervalos"]),
+        "metricas": resultado["metricas"],
+        "indicadores": resultado["indicadores"],
+        "linha_do_tempo": resultado["linha_do_tempo"],
+    }
+
+    caminhoJson = os.path.join(pastaAnalises, identificador + ".json")
+
+    with open(caminhoJson, "w", encoding="utf-8") as arquivo:
+        json.dump(analise, arquivo, ensure_ascii=False, indent=2)
+
+    return analise
+
+
+# lista as análises salvas, da mais nova para a mais antiga
+
+def listar_analises():
+    if not os.path.isdir(pastaAnalises):
+        return []
+
+    analises = []
+
+    for nomeArquivo in sorted(os.listdir(pastaAnalises), reverse=True):
+        if nomeArquivo.endswith(".json"):
+            identificador = nomeArquivo[:-5]
+            analises.append(carregar_analise(identificador))
+
+    return analises
+
+
+# abre uma análise salva pelo identificador
+
+def carregar_analise(identificador):
+    # só aceita letras, números e "-" para não abrir arquivos de fora da pasta
+    if not identificador.replace("-", "").isalnum():
+        return None
+
+    caminhoJson = os.path.join(pastaAnalises, identificador + ".json")
+
+    if not os.path.isfile(caminhoJson):
+        return None
+
+    with open(caminhoJson, "r", encoding="utf-8") as arquivo:
+        return json.load(arquivo)
+
+
+# gera o PDF de uma análise salva (usa a biblioteca fpdf2)
+
+def gerar_pdf(analise):
+    from fpdf import FPDF
+
+    coresEstados = {
+        "Working": (46, 125, 79),
+        "Turning": (217, 162, 27),
+        "Moving": (52, 102, 168),
+        "Idle": (163, 172, 165),
+        estadoDesconhecido: (181, 71, 58),
+    }
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(True, margin=15)
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.cell(0, 10, "AgroTech - Relatório de análise", new_x="LMARGIN", new_y="NEXT")
+
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, analise["nome"], new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Período: {analise['inicio']} até {analise['fim']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Arquivo: {analise['arquivo']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Gerado em: {analise['criado_em']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Intervalos válidos: {analise['quantidade_intervalos']}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    metricas = analise["metricas"]
+    indicadores = analise["indicadores"]
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Indicadores", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"Utilização produtiva: {formatar_numero(indicadores['utilizacao_produtiva'])}%", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Taxa de parada: {formatar_numero(indicadores['taxa_parada'])}%", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Permanência por estado", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+
+    for estado, dados in metricas["permanencia"].items():
+        horas = dados["segundos"] / 3600
+        cor = coresEstados[estado]
+        larguraBarra = dados["percentual"] * 0.8
+
+        pdf.cell(40, 7, nomesEstados[estado])
+        pdf.cell(45, 7, f"{formatar_numero(dados['percentual'])}% ({formatar_numero(horas)} h)")
+
+        if larguraBarra > 0:
+            pdf.set_fill_color(*cor)
+            pdf.rect(pdf.get_x(), pdf.get_y() + 1.5, larguraBarra, 4, style="F")
+
+        pdf.ln(7)
+
+    pdf.ln(4)
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Rotação do motor (RPM)", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"RPM médio: {formatar_numero(metricas['rpm']['media'])}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"RPM máximo: {formatar_numero(metricas['rpm']['maximo'])}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(4)
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Velocidade (unidade original do CSV)", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(0, 7, f"Velocidade média em operação: {formatar_numero(metricas['velocidade']['media'])}", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 7, f"Velocidade máxima: {formatar_numero(metricas['velocidade']['maximo'])}", new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(6)
+
+    pdf.set_font("Helvetica", "B", 13)
+    pdf.cell(0, 8, "Estado predominante por hora", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_font("Helvetica", "", 8)
+
+    dias = linha_do_tempo_por_dia(analise["linha_do_tempo"])
+    larguraHora = 6
+
+    for dia, horas in dias.items():
+        pdf.cell(22, 5, dia)
+        x = pdf.get_x()
+        y = pdf.get_y()
+
+        for numeroHora, estado in enumerate(horas):
+            if estado is not None:
+                pdf.set_fill_color(*coresEstados[estado])
+                pdf.rect(x + numeroHora * larguraHora, y + 0.5, larguraHora - 0.6, 4, style="F")
+
+        pdf.ln(5)
+
+    pdf.ln(3)
+    pdf.cell(0, 5, "Cores: verde = Trabalhando, amarelo = Manobrando, azul = Deslocando, cinza = Ocioso, vermelho = Desconhecido")
+
+    return bytes(pdf.output())
 
 
 # main do programa

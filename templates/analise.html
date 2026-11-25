@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_grade.html" import grade %}
+
+{% block titulo %}{{ analise.nome }} | AgroTech{% endblock %}
+
+{% block conteudo %}
+<section class="hero">
+  <div class="container">
+    <p><a href="{{ url_for('gerar_analise') }}">Voltar para as análises salvas</a></p>
+    <h1 class="titulo-livre">{{ analise.nome }}</h1>
+    <p class="suave">
+      De {{ analise.inicio[8:10] }}/{{ analise.inicio[5:7] }}/{{ analise.inicio[0:4] }} {{ analise.inicio[11:16] }}
+      a {{ analise.fim[8:10] }}/{{ analise.fim[5:7] }}/{{ analise.fim[0:4] }} {{ analise.fim[11:16] }}.
+      Arquivo <code>{{ analise.arquivo }}</code>, {{ "{:,}".format(analise.quantidade_intervalos).replace(",", ".") }} intervalos válidos.
+      Gerada em {{ analise.criado_em[8:10] }}/{{ analise.criado_em[5:7] }} às {{ analise.criado_em[11:16] }}.
+    </p>
+    <p><a class="botao" href="{{ url_for('baixar_pdf', identificador=analise.id) }}">Baixar PDF</a> <a class="botao secundario" href="{{ url_for('gerar_analise') }}">Gerar outra análise</a></p>
+
+    <div class="indicadores">
+      <div><strong>{{ numero(analise.indicadores.utilizacao_produtiva) }}%</strong>utilização produtiva</div>
+      <div><strong>{{ numero(analise.indicadores.taxa_parada) }}%</strong>taxa de parada</div>
+      <div><strong>{{ numero(analise.metricas.rpm.media) }}</strong>RPM médio<br><span class="suave">máximo {{ numero(analise.metricas.rpm.maximo) }}</span></div>
+      <div><strong>{{ numero(analise.metricas.velocidade.media) }}</strong>velocidade média em operação<br><span class="suave">máxima {{ numero(analise.metricas.velocidade.maximo) }}</span></div>
+    </div>
+
+    <h3>Tempo em cada estado</h3>
+    <div class="barras">
+      {% for estado, dados in analise.metricas.permanencia.items() %}
+      <div class="barra">
+        <span>{{ nomes[estado] }}</span>
+        <div class="trilho"><span class="{{ estado }}" style="width: {{ dados.percentual }}%;"></span></div>
+        <span class="valor">{{ numero(dados.percentual) }}% ({{ numero(dados.segundos / 3600) }} h)</span>
+      </div>
+      {% endfor %}
+    </div>
+
+    <h3>Estado predominante por hora</h3>
+    <p class="suave">Cada quadrado é uma hora do período analisado. <a href="{{ url_for('como_funciona') }}#codigo">Como esse cálculo é feito</a></p>
+    {{ grade(dias, nomes) }}
+  </div>
+</section>
+{% endblock %}
